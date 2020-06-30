@@ -2,9 +2,9 @@
   "compilerOptions": {
     "baseUrl": ".",
     "outDir": "dist",
-    "target": "es2018",
+    "target": "es2019",
     "lib": [
-      "es2018"
+      "es2020"
     ],
     "module": "commonjs",
     "esModuleInterop": true,
@@ -17,7 +17,6 @@
     "downlevelIteration": true,
     "strict": true,
     "noImplicitAny": true,
-    "strictNullChecks": false,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "suppressImplicitAnyIndexErrors": true,
@@ -27,7 +26,7 @@
     "experimentalDecorators": true,
     "typeRoots": [
       "node_modules/@types",
-      "typings"
+      "@types"
     ],
     "skipLibCheck": true,
     "newLine": "LF",
