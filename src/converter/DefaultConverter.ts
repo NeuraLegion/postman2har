@@ -472,7 +472,7 @@ export class DefaultConverter implements Converter {
       query,
       protocol,
       host,
-      pathname: '/' + pathname.replace(/^\//, ''),
+      pathname: '/' + pathname.replace(/^\/+/, ''),
       port: url.port,
       hash: url.hash
     };
