@@ -1,22 +1,29 @@
-// import { JSONLoader } from './loader';
-import HarV1 from 'har-format';
-import { ok } from 'assert';
+import { DefaultValidator } from './validator';
 import { DefaultConverter } from './converter';
+import { DefaultVariableParserFactory } from './parser';
+import Har from 'har-format';
+import { ok } from 'assert';
 
 export const postman2har = async (
-  spec: PostmanV1.Collection | PostmanV2.Collection,
+  spec: Postman.Collection,
   options?: {
-    baseUri?: string;
+    environments?: Record<string, string>;
   }
-): Promise<HarV1.Request[]> => {
+): Promise<Har.Request[]> => {
   ok(spec, `Please provide a valid Postman Collection.`);
 
-  // const loader = new JSONLoader();
-  const collection = spec as PostmanV2.Collection;
+  const collection = spec as Postman.Collection;
 
   ok(collection, 'Supplied Postman Collection is invalid.');
 
-  const converter = new DefaultConverter(options ?? {});
+  const validator = new DefaultValidator();
+  const parserFactory = new DefaultVariableParserFactory();
+
+  const converter = new DefaultConverter(
+    validator,
+    parserFactory,
+    options ?? {}
+  );
 
   return converter.convert(collection);
 };

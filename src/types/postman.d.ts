@@ -1,4 +1,4 @@
-declare namespace PostmanV2 {
+declare namespace Postman {
   export interface PropertyBaseDefinition {
     description?: string | Description;
   }
@@ -23,7 +23,7 @@ declare namespace PostmanV2 {
   }
 
   export interface Collection extends ItemGroup {
-    info?: {
+    info: {
       schema: string;
       name?: string;
       description?: Description | string;
@@ -63,7 +63,7 @@ declare namespace PostmanV2 {
   }
 
   export interface Header extends Property {
-    key?: string;
+    key: string;
     value?: string;
     system?: boolean;
   }
@@ -82,7 +82,7 @@ declare namespace PostmanV2 {
   }
 
   export interface QueryParam extends Property {
-    key?: string;
+    key: string;
     value?: string;
     system?: boolean;
   }
@@ -179,7 +179,7 @@ declare namespace PostmanV2 {
     auth?: { user?: string; password?: string };
     hash?: string;
     host?: string | string[];
-    path: string | (string | Variable)[];
+    path: string | (string | { type?: string; value?: string })[];
     port?: string;
     protocol?: string;
     query?: QueryParam[];
@@ -200,12 +200,9 @@ declare namespace PostmanV2 {
   }
 
   export interface Version extends PropertyBaseDefinition {
-    build?: string;
-    major?: string;
-    minor?: string;
-    patch?: string;
-    prerelease?: string;
-    raw?: string;
-    string?: string;
+    identifier?: string;
+    major: number;
+    minor: number;
+    patch: number;
   }
 }

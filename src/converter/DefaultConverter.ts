@@ -1,69 +1,98 @@
 import { Converter } from './Converter';
-import HarV1 from 'har-format';
+import { Validator } from '../validator';
+import { VariableParser, VariableParserFactory } from '../parser';
+import Har from 'har-format';
 import { ok } from 'assert';
-import { format, parse, URL } from 'url';
-import { ParsedUrlQuery, parse as parseQS, stringify } from 'querystring';
-import faker from 'faker';
+import { format, parse, UrlObject } from 'url';
+import { parse as parseQS, ParsedUrlQuery, stringify } from 'querystring';
+
+enum AuthLocation {
+  QUERY = 'queryString',
+  HEADER = 'headers'
+}
 
 export class DefaultConverter implements Converter {
-  constructor(
-    private readonly options: {
-      baseUri?: string;
-    }
-  ) {}
+  private readonly variables: ReadonlyArray<Postman.Variable>;
+  private readonly DEFAULT_PROTOCOL = 'https';
 
-  public async convert(
-    collection: PostmanV2.Collection
-  ): Promise<HarV1.Request[]> {
-    return this.traverse(collection);
+  constructor(
+    private readonly validator: Validator,
+    private readonly parserFactory: VariableParserFactory,
+    options: {
+      environments?: Record<string, string>;
+    }
+  ) {
+    this.variables = Object.entries(options?.environments ?? {}).map(
+      ([key, value]: [string, string]) => ({
+        key,
+        value
+      })
+    );
+  }
+
+  public async convert(collection: Postman.Collection): Promise<Har.Request[]> {
+    await this.validator.verify(collection);
+
+    return this.traverse(collection, [...this.variables]);
   }
 
   private traverse(
-    folder: PostmanV2.ItemGroup,
-    parent?: PostmanV2.ItemGroup
-  ): HarV1.Request[] {
+    folder: Postman.ItemGroup,
+    variables: Postman.Variable[]
+  ): Har.Request[] {
+    variables = [...(folder?.variable ?? []), ...variables];
+
     return folder.item
-      .map((x: PostmanV2.ItemGroup | PostmanV2.Item) =>
-        this.isGroup(x)
-          ? this.traverse(x, folder)
-          : this.convertRequest(x, {
-              ...parent,
-              ...folder
-            })
-      )
-      .flat(100)
-      .filter((x: HarV1.Request | undefined) => x != null) as HarV1.Request[];
+      .reduce((items: Har.Request[], x: Postman.ItemGroup | Postman.Item) => {
+        const subVariables = [...(x?.variable ?? []), ...variables];
+
+        if (this.isGroup(x)) {
+          return items.concat(this.traverse(x, subVariables));
+        }
+
+        const request: Har.Request | undefined = this.convertRequest(
+          x,
+          subVariables
+        );
+
+        if (request) {
+          items.push(request);
+        }
+
+        return items;
+      }, [])
+      .filter((x: Har.Request | undefined) => x != null) as Har.Request[];
   }
 
-  private isGroup(x: any): x is PostmanV2.ItemGroup {
+  private isGroup(x: any): x is Postman.ItemGroup {
     return Array.isArray(x.item);
   }
 
   private convertRequest(
-    item: PostmanV2.Item,
-    folder?: PostmanV2.ItemGroup
-  ): HarV1.Request | undefined {
+    item: Postman.Item,
+    variables: Postman.Variable[]
+  ): Har.Request | undefined {
     if (item.request) {
       const { method, url: urlObject, header, body, auth } = item.request;
 
       ok(method, 'Method is not defined.');
 
-      const url: string = this.convertUrl(urlObject, folder);
+      const url: string = this.convertUrl(urlObject, variables);
 
-      const request: HarV1.Request = {
+      const request: Har.Request = {
         url,
         method: (method ?? 'GET').toUpperCase(),
-        headers: this.convertHeaders(header!, folder),
-        queryString: this.convertQuery(url, folder),
+        headers: this.convertHeaders(header!, variables),
+        queryString: this.convertQuery(url, variables),
         cookies: [],
-        postData: body && this.convertBody(body, folder),
+        postData: body && this.convertBody(body, variables),
         headersSize: -1,
         bodySize: -1,
         httpVersion: 'HTTP/1.1'
       };
 
       if (auth) {
-        this.authRequest(request, auth);
+        this.authRequest(request, auth, variables);
       }
 
       return request;
@@ -71,194 +100,268 @@ export class DefaultConverter implements Converter {
   }
 
   private authRequest(
-    request: HarV1.Request,
-    auth: PostmanV2.RequestAuth
+    request: Har.Request,
+    auth: Postman.RequestAuth,
+    variables: Postman.Variable[]
   ): void {
-    const params: PostmanV2.Variable[] | undefined = auth[auth.type];
+    const params: Postman.Variable[] | undefined = auth[auth.type];
 
     if (!params) {
       return;
     }
 
     const options: { [p: string]: string } = Object.fromEntries(
-      params.map((val: PostmanV2.Variable) => [val.key, val.value])
+      params.map((val: Postman.Variable) => [val.key, val.value])
     );
 
     switch (auth.type) {
-      case 'apikey': {
-        const target: 'queryString' | 'headers' = {
-          query: 'queryString',
-          header: 'headers'
-        }[options.addTokenTo ?? 'header'];
-
-        const idx = request[target].findIndex(
-          (x: HarV1.QueryString | HarV1.Header) =>
-            x.name.toLowerCase() === options.key.toLowerCase()
-        );
-
-        if (idx !== -1) {
-          request[target].splice(idx, 1);
-        }
-
-        request[target].push({
-          name: options.key,
-          value: options.value
-        });
-
+      case 'apikey':
+        this.apiKeyAuth(request, options, variables);
         break;
-      }
-      case 'basic': {
-        const idx = request.headers.findIndex(
-          (x: HarV1.Header) => x.name.toLowerCase() === 'authorization'
-        );
-
-        if (idx !== -1) {
-          request.headers.splice(idx, 1);
-        }
-
-        request.headers.push({
-          name: '',
-          value:
-            'Basic ' +
-            Buffer.from(
-              `${options.username}:${options.password}`,
-              'utf8'
-            ).toString('base64')
-        });
+      case 'basic':
+        this.basicAuth(request, options, variables);
         break;
-      }
-      case 'bearer': {
-        const idx = request.headers.findIndex(
-          (x: HarV1.Header) => x.name.toLowerCase() === 'authorization'
-        );
-
-        if (idx !== -1) {
-          request.headers.splice(idx, 1);
-        }
-
-        request.headers.push({
-          name: 'Authorization',
-          value: 'Bearer ' + options.token.replace(/^Bearer/, '').trim()
-        });
+      case 'bearer':
+        this.bearerAuth(request, options, variables);
         break;
-      }
-      case 'oauth2': {
-        if (!options.accessToken || options.tokenType === 'mac') {
-          break;
-        }
-
-        const headerIdx = request.headers.findIndex(
-          (x: HarV1.Header) => x.name.toLowerCase() === 'authorization'
-        );
-
-        if (headerIdx !== -1) {
-          request.headers.splice(headerIdx, 1);
-        }
-
-        const queryIdx = request.queryString.findIndex(
-          (x: HarV1.QueryString) => x.name.toLowerCase() === 'access_token'
-        );
-
-        if (queryIdx !== -1) {
-          request.queryString.splice(queryIdx, 1);
-        }
-
-        const target: 'queryString' | 'headers' = {
-          query: 'queryString',
-          header: 'headers'
-        }[options.addTokenTo ?? 'header'];
-
-        if (target === 'queryString') {
-          request.queryString.push({
-            name: 'access_token',
-            value: options.accessToken
-          });
-        } else {
-          const headerPrefix = !options.headerPrefix
-            ? 'Bearer '
-            : options.headerPrefix;
-
-          request.headers.push({
-            name: 'Authorization',
-            value: `${headerPrefix.trim()} ${options.accessToken}`
-          });
-        }
+      case 'oauth2':
+        this.oauth2(request, options, variables);
         break;
-      }
       case 'noauth':
       default:
         break;
     }
   }
 
-  private convertBody(
-    body: PostmanV2.RequestBody,
-    _scope?: PostmanV2.VariableScope
-  ): HarV1.PostData {
-    return {
-      ...this.encodeBody(body),
-      comment:
-        typeof body.description === 'string'
-          ? body.description
-          : body.description?.content
-    };
+  private oauth2(
+    request: Har.Request,
+    options: Record<string, string>,
+    variables: Postman.Variable[]
+  ) {
+    if (!options.accessToken || options.tokenType === 'mac') {
+      return;
+    }
+
+    const headerIdx: number = request.headers.findIndex(
+      (x: Har.Header) => x.name.toLowerCase() === 'authorization'
+    );
+
+    if (headerIdx !== -1) {
+      request.headers.splice(headerIdx, 1);
+    }
+
+    const queryIdx: number = request.queryString.findIndex(
+      (x: Har.QueryString) => x.name.toLowerCase() === 'access_token'
+    );
+
+    if (queryIdx !== -1) {
+      request.queryString.splice(queryIdx, 1);
+    }
+
+    const target: AuthLocation =
+      AuthLocation[(options.addTokenTo ?? 'header').toUpperCase()];
+
+    const parser: VariableParser = this.parserFactory.createEnvVariableParser(
+      variables
+    );
+
+    if (target === AuthLocation.QUERY) {
+      request.queryString.push({
+        name: 'access_token',
+        value: parser.parse(options.accessToken)
+      });
+    }
+
+    if (target === AuthLocation.HEADER) {
+      const prefix: string = !options.headerPrefix
+        ? 'Bearer '
+        : options.headerPrefix;
+
+      request.headers.push({
+        name: 'Authorization',
+        value: `${prefix.trim()} ${parser.parse(options.accessToken)}`
+      });
+    }
   }
 
-  private encodeBody(body: PostmanV2.RequestBody): HarV1.PostData {
+  private bearerAuth(
+    request: Har.Request,
+    options: { [p: string]: string },
+    variables: Postman.Variable[]
+  ): void {
+    const parser: VariableParser = this.parserFactory.createEnvVariableParser(
+      variables
+    );
+    const idx: number = request.headers.findIndex(
+      (x: Har.Header) => x.name.toLowerCase() === 'authorization'
+    );
+
+    if (idx !== -1) {
+      request.headers.splice(idx, 1);
+    }
+
+    const value: string =
+      'Bearer ' +
+      parser
+        .parse(options.token)
+        .replace(/^Bearer/, '')
+        .trim();
+
+    request.headers.push({
+      value,
+      name: 'Authorization'
+    });
+  }
+
+  private basicAuth(
+    request: Har.Request,
+    options: { [p: string]: string },
+    variables: Postman.Variable[]
+  ) {
+    const parser: VariableParser = this.parserFactory.createEnvVariableParser(
+      variables
+    );
+    const idx: number = request.headers.findIndex(
+      (x: Har.Header) => x.name.toLowerCase() === 'authorization'
+    );
+
+    if (idx !== -1) {
+      request.headers.splice(idx, 1);
+    }
+
+    const value: string =
+      'Basic ' +
+      Buffer.from(
+        `${parser.parse(options.username)}:${parser.parse(options.password)}`,
+        'utf8'
+      ).toString('base64');
+
+    request.headers.push({
+      value,
+      name: 'Authorization'
+    });
+  }
+
+  private apiKeyAuth(
+    request: Har.Request,
+    options: { [p: string]: string },
+    variables: Postman.Variable[]
+  ): void {
+    const parser: VariableParser = this.parserFactory.createEnvVariableParser(
+      variables
+    );
+
+    const target: AuthLocation =
+      AuthLocation[(options.addTokenTo ?? 'header').toUpperCase()];
+
+    const idx: number = request[target].findIndex(
+      (x: Har.QueryString | Har.Header) =>
+        x.name.toLowerCase() === options.key.toLowerCase()
+    );
+
+    if (idx !== -1) {
+      request[target].splice(idx, 1);
+    }
+
+    request[target].push({
+      name: parser.parse(options.key),
+      value: parser.parse(options.value)
+    });
+  }
+
+  private convertBody(
+    body: Postman.RequestBody,
+    variables: Postman.Variable[]
+  ): Har.PostData {
+    const parser: VariableParser = this.parserFactory.createEnvVariableParser(
+      variables
+    );
+
     switch (body.mode) {
       case 'raw':
-        return {
-          params: [],
-          mimeType: this.getMimetype(body.options?.raw?.language ?? 'json'),
-          text: body.raw ?? ''
-        };
+        return this.rawBody(body);
       case 'urlencoded':
-        return {
-          mimeType: 'application/x-www-form-urlencoded',
-          params: Array.isArray(body.urlencoded)
-            ? body.urlencoded.map((x: PostmanV2.QueryParam) => ({
-                name: x.key!,
-                value: x.value
-              }))
-            : Object.entries(parseQS(body.urlencoded!)).map(
-                ([name, value]) => ({
-                  name,
-                  value: Array.isArray(value) ? value.join('&') : value
-                })
-              ),
-          text:
-            typeof body.urlencoded === 'string'
-              ? body.urlencoded
-              : stringify(
-                  Object.fromEntries(
-                    body.urlencoded!.map((x: PostmanV2.QueryParam) => [
-                      x.key,
-                      x.value
-                    ])
-                  )
-                )
-        };
+        return this.urlencoded(body, parser);
       case 'formdata':
-        return {
-          mimeType: 'multipart/form-data',
-          params: Array.isArray(body.formdata)
-            ? body.formdata.map((x: PostmanV2.FormParam) => ({
-                name: x.key!,
-                value: x.value,
-                contentType: x.contentType
-              }))
-            : [],
-          text: ''
-        };
+        return this.formData(body, parser);
       case 'file':
-        return {
-          mimeType: 'application/octet-stream',
-          params: [],
-          text: typeof body.file === 'string' ? body.file : body.file?.content!
-        };
+        return this.file(body);
       default:
         throw new Error('"mode" is not supported.');
     }
+  }
+
+  private file(body: Postman.RequestBody): Har.PostData {
+    return {
+      mimeType: 'application/octet-stream',
+      params: [],
+      text:
+        (typeof body.file === 'string' ? body.file : body.file?.content) ?? ''
+    };
+  }
+
+  private formData(
+    body: Postman.RequestBody,
+    parser: VariableParser
+  ): Har.PostData {
+    return {
+      mimeType: 'multipart/form-data',
+      params: Array.isArray(body.formdata)
+        ? body.formdata.map((x: Postman.FormParam) => ({
+            name: parser.parse(x.key ?? ''),
+            value: parser.parse(x.value ?? ''),
+            contentType: x.contentType
+          }))
+        : [],
+      text: ''
+    };
+  }
+
+  private urlencoded(
+    body: Postman.RequestBody,
+    parser: VariableParser
+  ): Har.PostData {
+    let params: { name: string; value: string | undefined }[];
+
+    if (Array.isArray(body.urlencoded)) {
+      params = body.urlencoded.map((x: Postman.QueryParam) => ({
+        name: parser.parse(x.key ?? ''),
+        value: parser.parse(x.value ?? '')
+      }));
+    } else {
+      params = Object.entries(parseQS(body.urlencoded!)).map(
+        ([name, value]) => ({
+          name,
+          value: Array.isArray(value) ? value.join('&') : value
+        })
+      );
+    }
+
+    const text: string =
+      typeof body.urlencoded === 'string'
+        ? body.urlencoded
+        : stringify(
+            Object.fromEntries(
+              body.urlencoded!.map((x: Postman.QueryParam) => [
+                parser.parse(x.key ?? ''),
+                parser.parse(x.value ?? '')
+              ])
+            )
+          );
+
+    return {
+      text,
+      params,
+      mimeType: 'application/x-www-form-urlencoded'
+    };
+  }
+
+  private rawBody(body: Postman.RequestBody): Har.PostData {
+    return {
+      params: [],
+      mimeType: this.getMimetype(body.options?.raw?.language ?? 'json'),
+      text: body.raw ?? ''
+    };
   }
 
   private getMimetype(
@@ -281,206 +384,145 @@ export class DefaultConverter implements Converter {
   }
 
   private convertHeaders(
-    headers: PostmanV2.Header[] | string,
-    scope?: PostmanV2.VariableScope
-  ): HarV1.Header[] {
+    headers: Postman.Header[] | string,
+    variables: Postman.Variable[]
+  ): Har.Header[] {
+    const parser: VariableParser = this.parserFactory.createEnvVariableParser(
+      variables
+    );
+
     if (Array.isArray(headers)) {
-      return headers.map((x: PostmanV2.Header) => ({
-        name: x.key!,
-        value: this.isVariable(x.key!)
-          ? (this.resolveVariable(x.key!, scope) as string)
-          : x.value!,
-        comment:
-          typeof x.description === 'string'
-            ? x.description
-            : x.description?.content
+      return headers.map((x: Postman.Header) => ({
+        name: x.key,
+        value: parser.parse(x.value ?? '')
       }));
     }
 
-    return headers.split('\n').map((x: string) => {
-      const [name, value] = x.split(': ');
+    return headers.split('\n').map((pair: string) => {
+      const [name, value] = pair.split(':').map((x: string) => x.trim());
 
       return {
         name,
-        value
+        value: parser.parse(value ?? '')
       };
     });
   }
 
   private convertUrl(
-    url: PostmanV2.Url | string,
-    scope?: PostmanV2.VariableScope
+    url: Postman.Url | string,
+    variables: Postman.Variable[]
   ): string {
+    const subVariables = typeof url === 'string' ? [] : url.variable;
+    const envParser: VariableParser = this.parserFactory.createEnvVariableParser(
+      [...(subVariables ?? []), ...variables]
+    );
+
     if (typeof url === 'string') {
-      return url;
+      return envParser.parse(url);
     }
 
+    const urlObject = this.prepareUrl(url);
+
+    let value = envParser.parse(format(urlObject));
+
+    if (!/http(s)?:\/\//i.test(value)) {
+      value = this.DEFAULT_PROTOCOL + '://' + value;
+    }
+
+    return value;
+  }
+
+  private prepareUrl(url: Postman.Url): UrlObject {
     const host: string | undefined = Array.isArray(url.host)
-      ? url.host
-          .map((x: string) =>
-            this.resolveVariable(x, {
-              ...scope,
-              ...url
-            })
-          )
-          .join('.')
+      ? url.host.join('.')
       : url.host;
 
     ok(host, 'Host is not defined.');
 
-    const protocol: string = (url.protocol = url.protocol ?? 'https').endsWith(
-      ':'
-    )
-      ? url.protocol
-      : url.protocol + ':';
+    const protocol: string | undefined = url.protocol
+      ? url.protocol.replace(/:$/, ':')
+      : undefined;
+
+    const urlParser: VariableParser = this.parserFactory.createUrlVariableParser(
+      url.variable
+    );
 
     const pathname: string = Array.isArray(url.path)
       ? url.path
-          .map((x: string | PostmanV2.Variable) =>
+          .map((x: string | Postman.Variable) =>
             typeof x === 'string'
-              ? this.resolveVariable(x, {
-                  ...scope,
-                  ...url
-                })
-              : this.resolveVariable(x.name!, {
-                  ...scope,
-                  ...url
-                })
+              ? urlParser.parse(x)
+              : urlParser.parse(x.value ?? '')
           )
           .join('/')
       : url.path;
 
-    const query: ParsedUrlQuery | undefined = Array.isArray(url.query)
-      ? url.query.reduce((params: ParsedUrlQuery, x: PostmanV2.QueryParam) => {
-          params[x.key!] = this.isVariable(x.key!)
-            ? (this.resolveVariable(x.key!, {
-                ...scope,
-                ...url
-              }) as string)
-            : x.value;
+    const query = this.prepareQueries(url, urlParser);
+
+    let auth = '';
+
+    if (url.auth) {
+      auth += url.auth.user ?? '';
+      auth += ':' + (url.auth.password ?? '');
+    }
+
+    return {
+      auth,
+      query,
+      protocol,
+      host,
+      pathname: '/' + pathname.replace(/^\//, ''),
+      port: url.port,
+      hash: url.hash
+    };
+  }
+
+  private prepareQueries(
+    url: Postman.Url,
+    urlParser: VariableParser
+  ): ParsedUrlQuery | undefined {
+    return Array.isArray(url.query)
+      ? url.query.reduce((params: ParsedUrlQuery, x: Postman.QueryParam) => {
+          if (x.key) {
+            params[x.key] = !x.value ? urlParser.parse(x.key) : x.value;
+          }
 
           return params;
         }, {})
       : undefined;
-
-    let auth: string = '';
-
-    if (url.auth) {
-      if (url.auth.user) {
-        auth += url.auth.user;
-      }
-
-      if (url.auth.password) {
-        auth += ':' + url.auth.password;
-      }
-    }
-
-    let urlObject = {
-      auth,
-      pathname,
-      query,
-      protocol,
-      host: this.options.baseUri,
-      port: url.port,
-      hash: url.hash
-    };
-
-    if (this.options.baseUri) {
-      const { host, port, protocol } = new URL(this.options.baseUri);
-
-      urlObject = {
-        ...urlObject,
-        host,
-        port,
-        protocol
-      };
-    }
-
-    return format(urlObject);
   }
 
   private convertQuery(
-    url: PostmanV2.Url | string,
-    scope?: PostmanV2.VariableScope
-  ): HarV1.QueryString[] {
+    url: Postman.Url | string,
+    variables: Postman.Variable[]
+  ): Har.QueryString[] {
     let query: ParsedUrlQuery | undefined;
+
+    const urlParser: VariableParser = this.parserFactory.createUrlVariableParser(
+      typeof url !== 'string' ? url.variable : []
+    );
 
     if (typeof url === 'string') {
       query = parse(url, true).query;
     } else {
-      query = Array.isArray(url.query)
-        ? url.query.reduce(
-            (params: ParsedUrlQuery, x: PostmanV2.QueryParam) => {
-              params[x.key!] = this.isVariable(x.key!)
-                ? (this.resolveVariable(x.key!, {
-                    ...scope,
-                    ...url
-                  }) as string)
-                : x.value;
-
-              return params;
-            },
-            {}
-          )
-        : undefined;
+      query = this.prepareQueries(url, urlParser);
     }
 
     if (!query) {
       return [];
     }
 
+    const envParser: VariableParser = this.parserFactory.createEnvVariableParser(
+      variables
+    );
+
     return Object.entries(query).map(
       ([name, value]: [string, undefined | string | string[]]) => ({
         name,
-        value: Array.isArray(value) ? value.join(',') : value!
+        value: envParser.parse(
+          (Array.isArray(value) ? value.join(',') : value) ?? ''
+        )
       })
-    );
-  }
-
-  private resolveVariable(
-    name: string,
-    scope?: PostmanV2.VariableScope
-  ): unknown | undefined {
-    if (this.isVariable(name)) {
-      const normalized = name
-        .replace(/^:/, '')
-        .replace(/^{{/, '')
-        .replace(/}}$/, '');
-
-      const variable: PostmanV2.Variable | undefined = scope?.variable?.find(
-        (x: PostmanV2.Variable) => x.key === normalized
-      );
-
-      if (variable) {
-        if (variable.value && variable.value !== 'schema type not provided') {
-          return variable.value;
-        }
-
-        switch (variable.type?.toLowerCase()) {
-          case 'string':
-          case 'text':
-            return faker.random.word();
-          case 'number':
-            return ~~(Math.random() * (1000 + 1));
-          case 'boolean':
-            return faker.random.boolean();
-          case 'any':
-          default:
-            return faker.random.arrayElement([
-              faker.random.alphaNumeric(10),
-              faker.random.number({ min: 1, max: 99 }),
-              faker.random.uuid()
-            ]);
-        }
-      }
-    }
-
-    return name;
-  }
-
-  private isVariable(name: string): boolean {
-    return (
-      name.startsWith(':') || (name.startsWith('{{') && name.endsWith('}}'))
     );
   }
 }
