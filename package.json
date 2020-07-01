@@ -11,6 +11,16 @@
     "email": "artem.derevnjuk@neuralegion.com"
   },
   "license": "MIT",
+  "keywords": [
+    "postman",
+    "har",
+    "api",
+    "har",
+    "json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "bugs": {
     "url": "https://github.com/NeuraLegion/postman2har/issues"
   },
@@ -26,10 +36,6 @@
       "@commitlint/config-conventional"
     ]
   },
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com/neuralegion",
-    "access": "restricted"
-  },
   "lint-staged": {
     "*.ts": [
       "eslint --fix",
@@ -44,7 +50,8 @@
     "lint": "eslint -c .eslintrc 'src/**/*.ts'",
     "format": "prettier --check 'src/**/*.ts'",
     "test": "mocha -r ts-node/register -r tsconfig-paths/register tests/**/*.spec.ts",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
   },
   "homepage": "https://github.com/NeuraLegion/postman2har#readme",
   "dependencies": {

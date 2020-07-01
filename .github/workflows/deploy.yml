@@ -32,9 +32,9 @@ jobs:
         with:
           node-version: 12
           registry-url: 'https://registry.npmjs.org'
-      - run: echo ::set-env name=RELEASE_VERSION::$(echo ${GITHUB_REF:10})
-      - run: npm version $RELEASE_VERSION --git-tag-version false
-      - run: npm ci
+
+      - run: npm version --no-git-tag-version "$VERSION"
+      - run: npm ci -q
       - run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -43,6 +43,7 @@ jobs:
         with:
           registry-url: 'https://npm.pkg.github.com'
           scope: '@NeuraLegion'
+
       - run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GPR_TOKEN }}
