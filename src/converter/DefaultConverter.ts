@@ -19,10 +19,10 @@ export class DefaultConverter implements Converter {
     private readonly validator: Validator,
     private readonly parserFactory: VariableParserFactory,
     options: {
-      environments?: Record<string, string>;
+      environment?: Record<string, string>;
     }
   ) {
-    this.variables = Object.entries(options?.environments ?? {}).map(
+    this.variables = Object.entries(options?.environment ?? {}).map(
       ([key, value]: [string, string]) => ({
         key,
         value

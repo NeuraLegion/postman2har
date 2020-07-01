@@ -7,7 +7,7 @@ import { ok } from 'assert';
 export const postman2har = async (
   collection: Postman.Collection,
   options?: {
-    environments?: Record<string, string>;
+    environment?: Record<string, string>;
   }
 ): Promise<Har.Request[]> => {
   ok(collection, `Please provide a valid Postman Collection.`);
