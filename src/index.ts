@@ -5,21 +5,16 @@ import Har from 'har-format';
 import { ok } from 'assert';
 
 export const postman2har = async (
-  spec: Postman.Collection,
+  collection: Postman.Collection,
   options?: {
     environments?: Record<string, string>;
   }
 ): Promise<Har.Request[]> => {
-  ok(spec, `Please provide a valid Postman Collection.`);
+  ok(collection, `Please provide a valid Postman Collection.`);
 
-  const collection = spec as Postman.Collection;
-
-  ok(collection, 'Supplied Postman Collection is invalid.');
-
-  const validator = new DefaultValidator();
-  const parserFactory = new DefaultVariableParserFactory();
-
-  const converter = new DefaultConverter(
+  const validator: DefaultValidator = new DefaultValidator();
+  const parserFactory: DefaultVariableParserFactory = new DefaultVariableParserFactory();
+  const converter: DefaultConverter = new DefaultConverter(
     validator,
     parserFactory,
     options ?? {}
