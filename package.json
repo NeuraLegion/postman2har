@@ -48,6 +48,8 @@
   },
   "homepage": "https://github.com/NeuraLegion/postman2har#readme",
   "dependencies": {
+    "faker": "^4.1.0",
+    "semver": "^7.3.2",
     "tslib": "~1.11.1"
   },
   "devDependencies": {
@@ -56,8 +58,11 @@
     "@types/chai": "^4.2.11",
     "@types/chai-as-promised": "^7.1.2",
     "@types/debug": "^4.1.5",
+    "@types/faker": "^4.1.12",
+    "@types/har-format": "^1.2.4",
     "@types/mocha": "~7.0.2",
     "@types/node": "~14.0.13",
+    "@types/semver": "^7.3.1",
     "@typescript-eslint/eslint-plugin": "^3.3.0",
     "@typescript-eslint/parser": "^3.3.0",
     "chai": "~4.2.0",
