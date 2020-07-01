@@ -42,8 +42,8 @@ export class DefaultConverter implements Converter {
   ): Har.Request[] {
     variables = [...(folder?.variable ?? []), ...variables];
 
-    return folder.item
-      .reduce((items: Har.Request[], x: Postman.ItemGroup | Postman.Item) => {
+    return folder.item.reduce(
+      (items: Har.Request[], x: Postman.ItemGroup | Postman.Item) => {
         const subVariables = [...(x?.variable ?? []), ...variables];
 
         if (this.isGroup(x)) {
@@ -60,8 +60,9 @@ export class DefaultConverter implements Converter {
         }
 
         return items;
-      }, [])
-      .filter((x: Har.Request | undefined) => x != null) as Har.Request[];
+      },
+      []
+    );
   }
 
   private isGroup(x: any): x is Postman.ItemGroup {
