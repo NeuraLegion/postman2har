@@ -1,6 +1,6 @@
 import { DefaultValidator } from './validator';
 import { DefaultConverter } from './converter';
-import { DefaultVariableParserFactory } from './parser';
+import { DefaultGenerators, DefaultVariableParserFactory } from './parser';
 import Har from 'har-format';
 import { ok } from 'assert';
 
@@ -13,7 +13,10 @@ export const postman2har = async (
   ok(collection, `Please provide a valid Postman Collection.`);
 
   const validator: DefaultValidator = new DefaultValidator();
-  const parserFactory: DefaultVariableParserFactory = new DefaultVariableParserFactory();
+  const generators: DefaultGenerators = new DefaultGenerators();
+  const parserFactory: DefaultVariableParserFactory = new DefaultVariableParserFactory(
+    generators
+  );
   const converter: DefaultConverter = new DefaultConverter(
     validator,
     parserFactory,
