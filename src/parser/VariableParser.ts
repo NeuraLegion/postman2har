@@ -1,5 +1,5 @@
 export interface VariableParser {
-  find(key: string): Postman.Variable | undefined;
+  find(key: string): Postman.Variable | (() => any) | undefined;
 
   parse(value: string): string;
 }

@@ -1,10 +1,11 @@
 import { BaseVariableParser } from './BaseVariableParser';
+import { Generators } from './Generators';
 
 export class UrlVariableParser extends BaseVariableParser {
   private readonly PATH_VARIABLE_IDENTIFIER = ':';
 
-  constructor(variables: Postman.Variable[]) {
-    super(variables);
+  constructor(variables: Postman.Variable[], generators: Generators) {
+    super(variables, generators);
   }
 
   public parse(value: string): string {
@@ -12,7 +13,15 @@ export class UrlVariableParser extends BaseVariableParser {
       value.startsWith(this.PATH_VARIABLE_IDENTIFIER) &&
       value !== this.PATH_VARIABLE_IDENTIFIER
     ) {
-      const variable = this.find(this.normalizeKey(value));
+      let variable: Postman.Variable | (() => any) | undefined = this.find(
+        this.normalizeKey(value)
+      );
+
+      if (variable && typeof variable === 'function') {
+        variable = {
+          value: variable()?.toString()
+        };
+      }
 
       if (
         variable &&

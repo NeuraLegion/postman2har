@@ -1,29 +1,36 @@
 import { VariableParser } from './VariableParser';
-import faker from 'faker';
+import { Generators } from './Generators';
 
 export abstract class BaseVariableParser implements VariableParser {
-  protected constructor(private readonly variables: Postman.Variable[]) {}
+  protected constructor(
+    private readonly variables: Postman.Variable[],
+    private readonly generators: Generators
+  ) {}
 
   public abstract parse(value: string): string;
 
-  public find(key: string): Postman.Variable | undefined {
-    return this.variables.find((x: Postman.Variable) => x.key === key);
+  public find(key: string): Postman.Variable | (() => any) | undefined {
+    const variable: Postman.Variable | undefined = this.variables.find(
+      (x: Postman.Variable) => x.key === key
+    );
+
+    if (!variable && key.startsWith('$')) {
+      return this.generators[key.replace(/^\$/, '')];
+    }
+
+    return variable;
   }
 
   protected sample(variable?: Postman.Variable): string {
     switch (variable?.type?.toLowerCase()) {
       case 'string':
       case 'text':
-        return faker.random.word();
+        return this.generators.randomWord();
       case 'number':
-        return String(faker.random.number({ min: 1, max: 99 }));
+        return String(this.generators.randomInt());
       case 'any':
       default:
-        return faker.random.arrayElement([
-          faker.random.alphaNumeric(10),
-          String(faker.random.number({ min: 1, max: 99 })),
-          faker.random.uuid()
-        ]);
+        return this.generators.randomAlphaNumeric();
     }
   }
 }
