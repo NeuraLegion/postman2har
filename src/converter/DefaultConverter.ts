@@ -4,7 +4,7 @@ import { VariableParser, VariableParserFactory } from '../parser';
 import Har from 'har-format';
 import { lookup } from 'mime-types';
 import { ok } from 'assert';
-import { format, parse, UrlObject } from 'url';
+import { format, parse, URL, UrlObject } from 'url';
 import { parse as parseQS, ParsedUrlQuery, stringify } from 'querystring';
 import { basename, extname } from 'path';
 
@@ -426,27 +426,60 @@ export class DefaultConverter implements Converter {
   }
 
   private convertUrl(
-    url: Postman.Url | string,
+    value: Postman.Url | string,
     variables: Postman.Variable[]
   ): string {
-    const subVariables = typeof url === 'string' ? [] : url.variable;
+    const subVariables = typeof value === 'string' ? [] : value.variable;
     const envParser: VariableParser = this.parserFactory.createEnvVariableParser(
       [...(subVariables ?? []), ...variables]
     );
 
-    if (typeof url === 'string') {
-      return envParser.parse(url);
+    if (typeof value === 'string') {
+      return envParser.parse(value);
     }
 
-    const urlObject = this.prepareUrl(url);
+    const urlObject: UrlObject = this.prepareUrl(value);
+    const urlString: string = envParser.parse(format(urlObject));
 
-    let value = envParser.parse(format(urlObject));
+    return this.normalizeUrl(urlString);
+  }
 
-    if (!/http(s)?:\/\//i.test(value)) {
-      value = this.DEFAULT_PROTOCOL + '://' + value;
+  private normalizeUrl(urlString: string): string {
+    const hasRelativeProtocol = urlString.startsWith('//');
+    const isRelativeUrl = !hasRelativeProtocol && /^\.*\//.test(urlString);
+
+    if (!isRelativeUrl) {
+      urlString = urlString.replace(
+        /^(?!(?:\w+:)?\/\/)|^\/\//,
+        this.DEFAULT_PROTOCOL
+      );
     }
 
-    return value;
+    const url: URL = new URL(urlString);
+
+    if (url.pathname) {
+      url.pathname = url.pathname
+        .replace(/(?<!https?:)\/{2,}/g, '/')
+        .replace(/\/$/, '');
+
+      try {
+        url.pathname = decodeURI(url.pathname);
+      } catch {
+        // noop
+      }
+    }
+
+    if (url.hostname) {
+      url.hostname = url.hostname.replace(/\.$/, '');
+    }
+
+    urlString = url.toString();
+
+    if (url.pathname === '/' && url.hash === '') {
+      urlString = urlString.replace(/\/$/, '');
+    }
+
+    return urlString;
   }
 
   private prepareUrl(url: Postman.Url): UrlObject {
@@ -488,7 +521,7 @@ export class DefaultConverter implements Converter {
       query,
       protocol,
       host,
-      pathname: '/' + pathname.replace(/^\/+/, ''),
+      pathname,
       port: url.port,
       hash: url.hash
     };
@@ -499,13 +532,12 @@ export class DefaultConverter implements Converter {
     urlParser: VariableParser
   ): ParsedUrlQuery | undefined {
     return Array.isArray(url.query)
-      ? url.query.reduce((params: ParsedUrlQuery, x: Postman.QueryParam) => {
-          if (x.key) {
-            params[x.key] = !x.value ? urlParser.parse(x.key) : x.value;
-          }
-
-          return params;
-        }, {})
+      ? Object.fromEntries(
+          url.query.map((x: Postman.QueryParam) => [
+            (x.key ?? '').trim(),
+            !x.value ? urlParser.parse(x.key) : x.value
+          ])
+        )
       : undefined;
   }
 
