@@ -2,9 +2,11 @@ import { Converter } from './Converter';
 import { Validator } from '../validator';
 import { VariableParser, VariableParserFactory } from '../parser';
 import Har from 'har-format';
+import { lookup } from 'mime-types';
 import { ok } from 'assert';
 import { format, parse, UrlObject } from 'url';
 import { parse as parseQS, ParsedUrlQuery, stringify } from 'querystring';
+import { basename, extname } from 'path';
 
 enum AuthLocation {
   QUERY = 'queryString',
@@ -83,7 +85,7 @@ export class DefaultConverter implements Converter {
       const request: Har.Request = {
         url,
         method: (method ?? 'GET').toUpperCase(),
-        headers: this.convertHeaders(header!, variables),
+        headers: this.convertHeaders(header ?? '', variables),
         queryString: this.convertQuery(url, variables),
         cookies: [],
         postData: body && this.convertBody(body, variables),
@@ -308,11 +310,25 @@ export class DefaultConverter implements Converter {
     return {
       mimeType: 'multipart/form-data',
       params: Array.isArray(body.formdata)
-        ? body.formdata.map((x: Postman.FormParam) => ({
-            name: parser.parse(x.key ?? ''),
-            value: parser.parse(x.value ?? ''),
-            contentType: x.contentType
-          }))
+        ? body.formdata.map((x: Postman.FormParam) => {
+            const fileName: string | undefined = x.src
+              ? basename(Array.isArray(x.src) ? x.src.pop()! : x.src)
+              : undefined;
+
+            const extension: string | undefined = fileName
+              ? extname(fileName)
+              : fileName;
+
+            const contentType: string | undefined =
+              x.contentType ?? (lookup(extension ?? '') || undefined);
+
+            return {
+              fileName,
+              contentType,
+              name: parser.parse(x.key ?? ''),
+              value: parser.parse(x.value ?? '')
+            };
+          })
         : [],
       text: ''
     };
@@ -330,7 +346,7 @@ export class DefaultConverter implements Converter {
         value: parser.parse(x.value ?? '')
       }));
     } else {
-      params = Object.entries(parseQS(body.urlencoded!)).map(
+      params = Object.entries(parseQS(body.urlencoded ?? '')).map(
         ([name, value]) => ({
           name,
           value: Array.isArray(value) ? value.join('&') : value
@@ -343,7 +359,7 @@ export class DefaultConverter implements Converter {
         ? body.urlencoded
         : stringify(
             Object.fromEntries(
-              body.urlencoded!.map((x: Postman.QueryParam) => [
+              (body.urlencoded ?? []).map((x: Postman.QueryParam) => [
                 parser.parse(x.key ?? ''),
                 parser.parse(x.value ?? '')
               ])
