@@ -1,5 +1,6 @@
 import { BaseVariableParser } from './BaseVariableParser';
 import { Generators } from './Generators';
+import { Postman } from '../types/postman';
 
 export class UrlVariableParser extends BaseVariableParser {
   private readonly PATH_VARIABLE_IDENTIFIER = ':';

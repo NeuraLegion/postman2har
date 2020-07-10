@@ -1,6 +1,7 @@
 import { DefaultValidator } from './validator';
 import { DefaultConverter } from './converter';
 import { DefaultGenerators, DefaultVariableParserFactory } from './parser';
+import { Postman } from './types/postman';
 import Har from 'har-format';
 import { ok } from 'assert';
 
@@ -25,3 +26,5 @@ export const postman2har = async (
 
   return converter.convert(collection);
 };
+
+export { Postman } from './types/postman';

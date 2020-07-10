@@ -3,6 +3,7 @@ import { VariableParser } from './VariableParser';
 import { EnvVariableParser } from './EnvVariableParser';
 import { UrlVariableParser } from './UrlVariableParser';
 import { Generators } from './Generators';
+import { Postman } from '../types/postman';
 
 export class DefaultVariableParserFactory implements VariableParserFactory {
   constructor(private readonly generators: Generators) {}

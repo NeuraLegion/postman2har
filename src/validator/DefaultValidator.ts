@@ -1,6 +1,7 @@
 import { Validator } from './Validator';
 import { VersionValidator } from './VersionValidator';
 import { SchemaValidator } from './SchemaValidator';
+import { Postman } from '../types/postman';
 
 const DEFAULT_VALIDATORS: (VersionValidator | SchemaValidator)[] = [
   new VersionValidator(),
