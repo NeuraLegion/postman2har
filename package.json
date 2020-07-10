@@ -10,6 +10,10 @@
     "name": "Artem Derevnjuk",
     "email": "artem.derevnjuk@neuralegion.com"
   },
+  "files": [
+    "dist/**",
+    "schemas/**"
+  ],
   "license": "MIT",
   "keywords": [
     "postman",
@@ -47,14 +51,16 @@
   "typings": "dist/index.d.ts",
   "scripts": {
     "semantic-release": "semantic-release",
-    "lint": "eslint -c .eslintrc 'src/**/*.ts'",
-    "format": "prettier --check 'src/**/*.ts'",
+    "lint": "eslint -c .eslintrc  --ext .ts src",
+    "format": "prettier --check src",
+    "format:write": "prettier --write src",
     "test": "mocha -r ts-node/register -r tsconfig-paths/register tests/**/*.spec.ts",
     "build": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build"
   },
   "homepage": "https://github.com/NeuraLegion/postman2har#readme",
   "dependencies": {
+    "ajv": "^6.12.3",
     "faker": "^4.1.0",
     "mime-types": "^2.1.27",
     "semver": "^7.3.2",

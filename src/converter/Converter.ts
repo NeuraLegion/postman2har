@@ -1,3 +1,4 @@
+import { Postman } from '../types/postman';
 import HarV1 from 'har-format';
 
 export interface Converter {

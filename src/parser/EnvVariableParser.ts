@@ -1,6 +1,7 @@
 import { Replacer } from './Replacer';
 import { BaseVariableParser } from './BaseVariableParser';
 import { Generators } from './Generators';
+import { Postman } from '../types/postman';
 
 export class EnvVariableParser extends BaseVariableParser {
   private readonly REGEX_EXTRACT_VARS = /{{([^{}]*?)}}/g;

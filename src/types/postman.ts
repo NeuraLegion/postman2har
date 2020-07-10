@@ -1,28 +1,37 @@
-declare namespace Postman {
-  export interface PropertyBaseDefinition {
+// eslint-disable-next-line @typescript-eslint/no-namespace
+export declare namespace Postman {
+  interface PropertyBaseDefinition {
     description?: string | Description;
   }
 
-  export interface Property extends PropertyBaseDefinition {
+  interface Property extends PropertyBaseDefinition {
     id?: string;
     name?: string;
     disabled?: boolean;
   }
 
-  export interface Certificate extends Property {
+  interface Certificate extends Property {
     matches?: string[] | UrlMatchPattern[];
-    key?: { src?: string } | string;
-    cert?: { src?: string } | string;
+    key?:
+      | {
+          src?: string;
+        }
+      | string;
+    cert?:
+      | {
+          src?: string;
+        }
+      | string;
     passphrase?: string;
   }
 
-  export interface ItemGroup extends Property, VariableScope {
+  interface ItemGroup extends Property, VariableScope {
     item: (Item | ItemGroup)[];
     auth?: RequestAuth;
     event?: Event[];
   }
 
-  export interface Collection extends ItemGroup {
+  interface Collection extends ItemGroup {
     info: {
       schema: string;
       name?: string;
@@ -31,7 +40,7 @@ declare namespace Postman {
     };
   }
 
-  export interface Cookie {
+  interface Cookie {
     key?: string;
     value?: string;
     expires?: string;
@@ -42,52 +51,60 @@ declare namespace Postman {
     httpOnly?: boolean;
     hostOnly?: boolean;
     session?: boolean;
-    extensions?: { key: string; value: string }[];
+    extensions?: {
+      key: string;
+      value: string;
+    }[];
   }
 
-  export interface Description {
+  interface Description {
     content: string;
     type?: string;
   }
 
-  export interface Event extends Property {
+  interface Event extends Property {
     listen?: string;
     script: string | string[] | Script;
   }
 
-  export interface FormParam extends Property {
+  interface FormParam extends Property {
     key: string;
     value?: string;
     contentType?: string;
     src?: string[] | string;
   }
 
-  export interface Header extends Property {
+  interface Header extends Property {
     key: string;
     value?: string;
     system?: boolean;
   }
 
-  export interface Item extends Property, VariableScope {
+  interface Item extends Property, VariableScope {
     request?: Request;
     response?: Response[];
     event?: Event[];
   }
 
-  export interface ProxyConfig extends Property {
-    match?: string | { pattern: string } | UrlMatchPattern;
+  interface ProxyConfig extends Property {
+    match?:
+      | string
+      | {
+          pattern: string;
+        }
+      | UrlMatchPattern;
     host?: string;
     port?: number;
     tunnel?: boolean;
   }
 
-  export interface QueryParam extends Property {
+  interface QueryParam extends Property {
     key: string;
     value?: string;
     system?: boolean;
   }
 
-  export interface Request extends Property {
+  interface Request extends Property {
     url: string | Url;
     method?:
       | (
@@ -115,7 +132,7 @@ declare namespace Postman {
     certificate?: Certificate;
   }
 
-  export interface RequestAuth extends Property {
+  interface RequestAuth extends Property {
     type:
       | 'apikey'
       | 'awsv4'
@@ -141,14 +158,19 @@ declare namespace Postman {
     oauth2?: Variable[];
   }
 
-  export interface RequestBody extends PropertyBaseDefinition {
+  interface RequestBody extends PropertyBaseDefinition {
     mode?: 'raw' | 'urlencoded' | 'formdata' | 'file' | 'graphql';
     raw?: string;
     graphql?: {
       [k: string]: any;
     };
     urlencoded?: QueryParam[] | string;
-    file?: string | { src: string | null; content?: string };
+    file?:
+      | string
+      | {
+          src: string | null;
+          content?: string;
+        };
     formdata?: FormParam[];
     options?: {
       [key: string]: {
@@ -157,7 +179,7 @@ declare namespace Postman {
     };
   }
 
-  export interface Response extends Property {
+  interface Response extends Property {
     body?: string;
     code: number;
     cookie: Cookie[];
@@ -168,38 +190,49 @@ declare namespace Postman {
     responseSize?: number;
   }
 
-  export interface Script extends Property {
+  interface Script extends Property {
     type?: string;
     src?: Url;
     exec?: string[] | string;
   }
 
-  export interface Url extends PropertyBaseDefinition, VariableScope {
+  interface Url extends PropertyBaseDefinition, VariableScope {
     raw?: string;
-    auth?: { user?: string; password?: string };
+    auth?: {
+      user?: string;
+      password?: string;
+    };
     hash?: string;
     host?: string | string[];
-    path: string | (string | { type?: string; value?: string })[];
+    path:
+      | string
+      | (
+          | string
+          | {
+              type?: string;
+              value?: string;
+            }
+        )[];
     port?: string;
     protocol?: string;
     query?: QueryParam[];
   }
 
-  export interface VariableScope {
+  interface VariableScope {
     variable: Variable[];
   }
 
-  export interface UrlMatchPattern {
+  interface UrlMatchPattern {
     pattern?: string;
   }
 
-  export interface Variable extends Property {
+  interface Variable extends Property {
     value?: any;
     type?: string;
     key?: string;
   }
 
-  export interface Version extends PropertyBaseDefinition {
+  interface Version extends PropertyBaseDefinition {
     identifier?: string;
     major: number;
     minor: number;
