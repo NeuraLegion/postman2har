@@ -440,9 +440,12 @@ export class DefaultConverter implements Converter {
     }
 
     const urlObject: UrlObject = this.prepareUrl(value);
-    const urlString: string = envParser.parse(format(urlObject));
 
-    return this.normalizeUrl(urlString);
+    let urlString: string = decodeURI(format(urlObject));
+
+    urlString = envParser.parse(urlString);
+
+    return this.normalizeUrl(encodeURI(urlString));
   }
 
   private normalizeUrl(urlString: string): string {
@@ -508,7 +511,7 @@ export class DefaultConverter implements Converter {
           .join('/')
       : url.path;
 
-    const query = this.prepareQueries(url, urlParser);
+    const query = this.prepareQueries(url);
 
     let auth = '';
 
@@ -528,15 +531,12 @@ export class DefaultConverter implements Converter {
     };
   }
 
-  private prepareQueries(
-    url: Postman.Url,
-    urlParser: VariableParser
-  ): ParsedUrlQuery | undefined {
+  private prepareQueries(url: Postman.Url): ParsedUrlQuery | undefined {
     return Array.isArray(url.query)
       ? Object.fromEntries(
           url.query.map((x: Postman.QueryParam) => [
             (x.key ?? '').trim(),
-            !x.value ? urlParser.parse(x.key) : x.value
+            (x.value ?? '').trim()
           ])
         )
       : undefined;
@@ -548,14 +548,10 @@ export class DefaultConverter implements Converter {
   ): Har.QueryString[] {
     let query: ParsedUrlQuery | undefined;
 
-    const urlParser: VariableParser = this.parserFactory.createUrlVariableParser(
-      typeof url !== 'string' ? url.variable : []
-    );
-
     if (typeof url === 'string') {
       query = parse(url, true).query;
     } else {
-      query = this.prepareQueries(url, urlParser);
+      query = this.prepareQueries(url);
     }
 
     if (!query) {
