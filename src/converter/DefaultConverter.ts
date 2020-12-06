@@ -9,7 +9,7 @@ import { format, parse, URL, UrlObject } from 'url';
 import { parse as parseQS, ParsedUrlQuery, stringify } from 'querystring';
 import { basename, extname } from 'path';
 
-enum AuthLocation {
+export enum AuthLocation {
   QUERY = 'queryString',
   HEADER = 'headers'
 }
@@ -283,13 +283,15 @@ export class DefaultConverter implements Converter {
 
     switch (body.mode) {
       case 'raw':
-        return this.rawBody(body);
+        return this.rawBody(body, parser);
       case 'urlencoded':
         return this.urlencoded(body, parser);
       case 'formdata':
         return this.formData(body, parser);
       case 'file':
         return this.file(body);
+      case 'graphql':
+        return this.graphql(body, parser);
       default:
         throw new Error('"mode" is not supported.');
     }
@@ -298,9 +300,20 @@ export class DefaultConverter implements Converter {
   private file(body: Postman.RequestBody): Har.PostData {
     return {
       mimeType: 'application/octet-stream',
-      params: [],
       text:
         (typeof body.file === 'string' ? body.file : body.file?.content) ?? ''
+    };
+  }
+
+  private graphql(
+    body: Postman.RequestBody,
+    parser: VariableParser
+  ): Har.PostData {
+    const { query, variables } = body.graphql ?? {};
+
+    return {
+      mimeType: 'application/json',
+      text: JSON.stringify({ query, variables: parser.parse(variables) })
     };
   }
 
@@ -330,8 +343,7 @@ export class DefaultConverter implements Converter {
               value: parser.parse(x.value ?? '')
             };
           })
-        : [],
-      text: ''
+        : []
     };
   }
 
@@ -367,18 +379,20 @@ export class DefaultConverter implements Converter {
             )
           );
 
-    return {
+    return ({
       text,
       params,
       mimeType: 'application/x-www-form-urlencoded'
-    };
+    } as unknown) as Har.PostData;
   }
 
-  private rawBody(body: Postman.RequestBody): Har.PostData {
+  private rawBody(
+    body: Postman.RequestBody,
+    parser: VariableParser
+  ): Har.PostData {
     return {
-      params: [],
       mimeType: this.getMimetype(body.options?.raw?.language ?? 'json'),
-      text: body.raw ?? ''
+      text: parser.parse(body.raw ?? '')
     };
   }
 
