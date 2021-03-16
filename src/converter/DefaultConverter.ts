@@ -77,7 +77,7 @@ export class DefaultConverter implements Converter {
     variables: Postman.Variable[]
   ): Har.Request | undefined {
     if (item.request) {
-      const { method, url: urlObject, header, body, auth } = item.request;
+      const { method, header, body, auth, url: urlObject } = item.request;
 
       ok(method, 'Method is not defined.');
 
@@ -453,7 +453,7 @@ export class DefaultConverter implements Converter {
       return envParser.parse(value);
     }
 
-    const urlObject: UrlObject = this.prepareUrl(value);
+    const urlObject: UrlObject = this.prepareUrl(value, envParser);
 
     let urlString: string = decodeURI(format(urlObject));
 
@@ -500,30 +500,40 @@ export class DefaultConverter implements Converter {
     return urlString;
   }
 
-  private prepareUrl(url: Postman.Url): UrlObject {
-    const host: string | undefined = Array.isArray(url.host)
+  private prepareUrl(url: Postman.Url, env: VariableParser): UrlObject {
+    let host: string | undefined = Array.isArray(url.host)
       ? url.host.join('.')
       : url.host;
 
     ok(host, 'Host is not defined.');
 
-    const protocol: string | undefined = url.protocol
-      ? url.protocol.replace(/:$/, ':')
-      : undefined;
+    if (host) {
+      host = env.parse(host);
+    }
 
-    const urlParser: VariableParser = this.parserFactory.createUrlVariableParser(
+    let protocol: string | undefined = url.protocol;
+
+    if (protocol) {
+      protocol = env.parse(protocol)?.replace(/:?$/, ':');
+    }
+
+    const fragments: VariableParser = this.parserFactory.createUrlVariableParser(
       url.variable
     );
 
-    const pathname: string = Array.isArray(url.path)
+    let pathname: string = Array.isArray(url.path)
       ? url.path
           .map((x: string | Postman.Variable) =>
-            typeof x === 'string'
-              ? urlParser.parse(x)
-              : urlParser.parse(x.value ?? '')
+            fragments.parse(typeof x === 'string' ? x : x.value ?? '')
           )
           .join('/')
       : url.path;
+
+    if (pathname) {
+      pathname = env
+        .parse(pathname)
+        .replace(/^\/?([^/]+(?:\/[^/]+)*)\/?$/, '/$1');
+    }
 
     const query = this.prepareQueries(url);
 
