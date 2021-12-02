@@ -1,5 +1,7 @@
 # @neuralegion/postman2har
 
+**THIS REPO HAS BEEN DEPRECATED. THE DEVELOPMENT HAS MOVED TO A NEW REPOSITORY: https://github.com/NeuraLegion/har-sdk**
+
 Transform you Postman collection to a series of HAR request objects.
 
 - https://schema.getpostman.com/collection/json/v2.1.0/draft-07/docs/index.html
